@@ -23,8 +23,18 @@
       else if (key === 'value') el.value = value;
       else el.setAttribute(key, value === true ? '' : String(value));
     }
-    el.append(...children.flat(Infinity).filter((c) => c != null && c !== false));
+    el.append(...present(children));
     return el;
+  }
+
+  /** Replaces an element's children, skipping null, undefined and false as h() does. */
+  function fill(el, ...children) {
+    el.replaceChildren(...present(children));
+  }
+
+  // DOM methods would turn a null child into the text "null".
+  function present(children) {
+    return children.flat(Infinity).filter((c) => c != null && c !== false);
   }
 
   // 24×24 stroke icons.
@@ -42,7 +52,12 @@
     import: ['M12 4v11', 'M7 10l5 5 5-5', 'M4 20h16'],
     export: ['M12 15V4', 'M7 9l5-5 5 5', 'M4 20h16'],
     pull: ['M12 11v9', 'M8.5 16.5L12 20l3.5-3.5', 'M7 17a5 5 0 0 1-1-9.9A6 6 0 0 1 17.7 8 4.5 4.5 0 0 1 17 17'],
+    push: ['M12 20v-9', 'M8.5 14.5L12 11l3.5 3.5', 'M7 17a5 5 0 0 1-1-9.9A6 6 0 0 1 17.7 8 4.5 4.5 0 0 1 17 17'],
     close: ['M6 6l12 12M18 6L6 18'],
+    heart: ['M12 20l-7-7a4.5 4.5 0 0 1 7-5.6 4.5 4.5 0 0 1 7 5.6z'],
+    undo: ['M9 14L4 9l5-5', 'M4 9h10.5a5.5 5.5 0 0 1 0 11H11'],
+    redo: ['M15 14l5-5-5-5', 'M20 9H9.5a5.5 5.5 0 0 0 0 11H13'],
+    search: ['M11 18a7 7 0 1 0 0-14 7 7 0 0 0 0 14z', 'M20 20l-4-4'],
   };
 
   function icon(name, className = 'pm-icon') {
@@ -63,5 +78,5 @@
     return `${n.toLocaleString()} ${word}${n === 1 ? '' : 's'}`;
   }
 
-  PM.dom = { h, icon, plural };
+  PM.dom = { h, fill, icon, plural };
 })();

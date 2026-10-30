@@ -2,7 +2,8 @@
  * End-to-end test: loads the real extension into Chromium and drives the
  * dashboard on a stand-in YouTube page (every youtube.com request is answered
  * with mock-youtube.html, served with Trusted Types enforced like YouTube).
- * Google sign-in and the YouTube API are stubbed inside the service worker.
+ * For syncing, Google sign-in is stubbed and the fake YouTube API from
+ * tests/support runs inside the extension's service worker.
  *
  *   npm run test:e2e              (needs: npm i -D playwright && npx playwright install chromium)
  *   SCREENSHOTS=dir npm run test:e2e   also saves screenshots of the dashboard
@@ -18,6 +19,7 @@ const M = require('../../extension/lib/model.js');
 const EXTENSION = path.resolve(__dirname, '../../extension');
 const SAMPLE = path.resolve(__dirname, '../../samples/sample-backup.json');
 const MOCK_PAGE = fs.readFileSync(path.join(__dirname, 'mock-youtube.html'), 'utf8');
+const FAKE_YOUTUBE = fs.readFileSync(path.join(__dirname, '../support/fake-youtube.js'), 'utf8');
 const EXTENSION_ID = 'hbmgcfjjjjkdmbajfejeeabakcakcoil';
 const PIXEL = Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==', 'base64');
 const HOST = '#youtube-playlist-manager';
@@ -33,10 +35,15 @@ const dialogs = [];
 
 // --- helpers -------------------------------------------------------------------
 
-const exact = (text) => new RegExp(`^${text.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}$`);
-const button = (label) => page.locator(`${HOST} .pm-actions .pm-btn`, { hasText: label });
+const escape = (text) => text.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+const exact = (text) => new RegExp(`^${escape(text)}$`);
+const button = (label) => page.locator(`${HOST} .pm-btn`, { hasText: new RegExp(`^${escape(label)}`) });
+const statusButton = (label) => page.locator(`${HOST} .pm-status-actions .pm-btn`, { hasText: exact(label) });
 const row = (name, p = page) => p.locator(`${HOST} .pm-row`).filter({ has: p.locator('.pm-name, .pm-link', { hasText: exact(name) }) });
+const playlistRow = (id) => page.locator(`${HOST} .pm-row[data-kind="playlist"][data-id="${id}"]`);
+const videoIn = (playlistId, title) => page.locator(`${HOST} .pm-row[data-kind="video"][data-playlist="${playlistId}"][data-label="${title}"]`);
 const storage = () => worker.evaluate(() => chrome.storage.local.get(null));
+const onYouTube = (playlistId) => worker.evaluate((id) => self.fakeYouTube.videosIn(id), playlistId);
 
 /**
  * The visible tree as text: "F-" open folder, "F+" closed folder, "P-"/"P+"
@@ -67,9 +74,16 @@ async function waitFor(check, description, timeout = 5000) {
   throw new Error(`Timed out waiting for ${description} (last value: ${JSON.stringify(last)})`);
 }
 
-async function expectStatus(pattern) {
+async function statusText() {
   const status = page.locator(`${HOST} .pm-status-text`);
-  await waitFor(async () => pattern.test((await status.count()) ? await status.innerText() : ''), `status ${pattern}`);
+  return (await status.count()) ? status.innerText() : '';
+}
+
+async function expectStatus(pattern, timeout) {
+  await waitFor(async () => pattern.test(await statusText()), `status ${pattern}`, timeout)
+    .catch(async (err) => {
+      throw new Error(`${err.message}\nstatus: ${JSON.stringify(await statusText())}`);
+    });
 }
 
 async function expectTree(expected, p = page) {
@@ -94,7 +108,7 @@ async function shot(name) {
 const steps = [];
 const step = (name, fn) => steps.push({ name, fn });
 
-// --- steps -------------------------------------------------------------------------
+// --- the dashboard on its own -----------------------------------------------------
 
 step('the extension loads with its pinned ID', async () => {
   assert.equal(new URL(worker.url()).host, EXTENSION_ID);
@@ -238,13 +252,84 @@ step('opens a closed folder while you hover over it during a drag', async () => 
   }, 'Watch someday dropped into Focus');
 });
 
-step('deletes a folder and keeps what was inside', async () => {
+step('deletes a folder, keeps what was inside, and can undo and redo it', async () => {
+  const before = await tree();
   await row('Road/trips').hover();
   await row('Road/trips').locator('[data-action="delete"]').click();
   await waitFor(async () => !(await tree()).some((r) => r.includes('Road/trips')), 'folder deleted');
-  assert.match(dialogs.at(-1), /The 1 item inside will move to the top level/);
+  await expectStatus(/^Deleted “Road\/trips”\. The 1 item inside moved to the top level\./);
   assert.deepEqual((await tree()).slice(-3), ['F+ Learning', 'P- Cooking ideas', '  V Deleted video']);
+
+  await statusButton('Undo').click();
+  await expectTree(before);
+  await expectStatus(/^Undone: Delete folder\./);
+  await page.locator(`${HOST} .pm-tree`).focus();
+  await page.keyboard.press('Control+Shift+Z');
+  await waitFor(async () => !(await tree()).some((r) => r.includes('Road/trips')), 'deleted again');
   await shot('2-organized');
+});
+
+step('searches folders, playlists and videos', async () => {
+  const before = await tree();
+  const search = page.locator(`${HOST} .pm-search-input`);
+  await search.fill('pasta');
+  await expectTree(['F- Music', '  P- Morning run', '    V Sample: Weeknight pasta']);
+  assert.equal(await page.locator(`${HOST} .pm-summary`).innerText(), '1 match');
+  assert.equal(await videoIn('PLsample0000000001', 'Sample: Weeknight pasta').locator('mark').innerText(), 'pasta');
+
+  await search.fill('pasta weeknight');
+  await expectTree(['F- Music', '  P- Morning run', '    V Sample: Weeknight pasta']);
+  // A playlist whose name matches is shown with everything in it.
+  await search.fill('cooking');
+  await expectTree(['P- Cooking ideas', '  V Deleted video']);
+  assert.equal(await page.locator(`${HOST} .pm-summary`).innerText(), '1 match');
+  await search.fill('nothing like this');
+  await waitFor(async () => (await page.locator(`${HOST} .pm-empty`).innerText()) === 'No matches for “nothing like this”.', 'no matches');
+  await search.press('Escape');
+  await expectTree(before);
+});
+
+step('selects several videos with Ctrl-click and drags them together; undo puts them back', async () => {
+  const before = await tree();
+  await row('Sample: Cool-down stretches').locator('.pm-index').click({ modifiers: ['Control'] });
+  await row('Sample: Tempo run playlist').locator('.pm-index').click({ modifiers: ['Control'] });
+  assert.equal(await page.locator(`${HOST} .pm-selection-count`).innerText(), '2 videos selected');
+  assert.doesNotMatch(await page.locator(`${HOST} .pm-tools`).innerText(), /\bnull\b|undefined/);
+  await row('Sample: Tempo run playlist').dragTo(row('Cooking ideas'));
+  const moved = [
+    'F- Music',
+    '  P- Morning run',
+    '    V Sample: Easy 5 km warm-up mix',
+    '    V Sample: Weeknight pasta',
+    '  F- Focus',
+    '    P+ Deep work',
+    '    P+ Watch someday',
+    'F+ Learning',
+    'P- Cooking ideas',
+    '  V Deleted video',
+    '  V Sample: Cool-down stretches',
+    '  V Sample: Tempo run playlist',
+  ];
+  await expectTree(moved);
+  assert.equal(await page.locator(`${HOST} .pm-row.pm-selected`).count(), 2, 'the moved videos stay selected');
+
+  await page.keyboard.press('Control+Z');
+  await expectTree(before);
+  await page.keyboard.press('Control+Y');
+  await expectTree(moved);
+});
+
+step('selects a range with Shift-click and removes it with Delete, then undoes', async () => {
+  const before = await tree();
+  await row('Deleted video').locator('.pm-index').click();
+  await row('Sample: Tempo run playlist').locator('.pm-index').click({ modifiers: ['Shift'] });
+  assert.equal(await page.locator(`${HOST} .pm-selection-count`).innerText(), '3 videos selected');
+  await page.keyboard.press('Delete');
+  await waitFor(async () => (await tree()).slice(-2).join() === 'P- Cooking ideas,  E', 'videos removed');
+  await expectStatus(/^Removed 3 videos\./);
+  await statusButton('Undo').click();
+  await expectTree(before);
+  assert.equal(await button('Push to YouTube').locator('.pm-count').isVisible(), false, 'nothing from YouTube yet, so nothing to push');
 });
 
 step('exports one JSON file with the structure and full video data', async () => {
@@ -255,6 +340,7 @@ step('exports one JSON file with the structure and full video data', async () =>
   assert.match(download.suggestedFilename(), /^youtube-playlist-manager-backup-\d{4}-\d{2}-\d{2}\.json$/);
   const backup = JSON.parse(fs.readFileSync(await download.path(), 'utf8'));
   assert.deepEqual(M.validate(backup), []);
+  assert.equal(backup.version, 2);
   const stored = await storage();
   assert.deepEqual(backup.root, stored['pm.structure'].root);
   assert.deepEqual(backup.folders, stored['pm.structure'].folders);
@@ -317,7 +403,7 @@ step('shows changes made in another tab', async () => {
 step('rejects a damaged backup and says why', async () => {
   const before = await tree();
   const bad = path.join(tmp, 'bad.json');
-  fs.writeFileSync(bad, JSON.stringify({ format: 'youtube-playlist-manager', version: 1, root: ['ghost'], folders: {}, playlists: {}, videos: {} }));
+  fs.writeFileSync(bad, JSON.stringify({ format: 'youtube-playlist-manager', version: 2, root: ['ghost'], folders: {}, playlists: {}, videos: {} }));
   await chooseFile(bad);
   await expectStatus(/Couldn't import “bad\.json”: The top level lists "ghost", which is not a folder or playlist/);
   assert.deepEqual(await tree(), before);
@@ -333,82 +419,176 @@ step('asks before replacing the library on import, and can be declined', async (
   assert.deepEqual(await tree(), before);
 });
 
-step('explains how to set up Pull when no client ID is configured', async () => {
+step('explains how to set up syncing when no client ID is configured', async () => {
   await button('Pull from YouTube').click();
   await expectStatus(new RegExp(`isn't set up yet.*https://${EXTENSION_ID}\\.chromiumapp\\.org/`));
   assert.equal(await button('Pull from YouTube').isEnabled(), true);
 });
 
-step('pulls every playlist and video from YouTube (Google stubbed)', async () => {
+// --- syncing with (a fake) YouTube ---------------------------------------------------
+
+step('pulls from YouTube, asking before replacing a library from another channel', async () => {
+  await worker.evaluate(FAKE_YOUTUBE);
   await worker.evaluate(() => {
-    self.PM_CONFIG.googleClientId = 'test-client.apps.googleusercontent.com';
-    chrome.identity.launchWebAuthFlow = async ({ url }) => {
-      self.lastAuthUrl = url;
-      const params = new URL(url).searchParams;
-      return `${params.get('redirect_uri')}#access_token=fake-token&token_type=Bearer&expires_in=3599&state=${params.get('state')}`;
+    const titles = {
+      run1: 'Run: warm-up', run2: 'Run: tempo', run3: 'Run: cool-down', new1: 'Run: hill sprints',
+      focus1: 'Focus: lo-fi beats', focus2: 'Focus: brown noise', cook1: 'Cook: pasta', new2: 'Guitar: first chords',
+      liked1: 'Liked: funny cats', liked2: 'Liked: travel vlog', liked3: 'Liked: space documentary',
     };
-    const reply = (body, status = 200) => new Response(JSON.stringify(body), { status, headers: { 'content-type': 'application/json' } });
-    const item = (videoId, title = `Pulled ${videoId}`) => ({
-      snippet: { title, publishedAt: '2025-01-01T00:00:00Z', resourceId: { videoId } },
-      contentDetails: { videoId },
+    self.fakeYouTube = createFakeYouTube({
+      channel: { id: 'UCe2e', title: 'E2E Channel' },
+      playlists: [
+        { id: 'PLrun', title: 'Morning run', videos: ['run1', 'run2', 'run3'] },
+        { id: 'PLfocus', title: 'Deep focus', videos: ['focus1', 'focus2'] },
+        { id: 'PLcook', title: 'Cooking', videos: ['cook1'] },
+      ],
+      liked: ['run1', 'liked1', 'liked2'],
+      videos: Object.fromEntries(Object.entries(titles).map(([id, title]) => [id, { title, channelTitle: 'Some Channel' }])),
     });
-    self.fetch = async (href, init) => {
-      const url = new URL(href);
-      if (init.headers.Authorization !== 'Bearer fake-token') return reply({ error: { code: 401, message: 'bad token' } }, 401);
-      const endpoint = url.pathname.split('/').pop();
-      if (endpoint === 'playlists') {
-        return url.searchParams.get('pageToken')
-          ? reply({ items: [{ id: 'PLpulled2', snippet: { title: 'Pulled two' }, status: { privacyStatus: 'private' } }] })
-          : reply({ items: [{ id: 'PLpulled1', snippet: { title: 'Pulled one' }, status: { privacyStatus: 'public' } }], nextPageToken: 'page2' });
-      }
-      if (endpoint === 'playlistItems') {
-        return url.searchParams.get('playlistId') === 'PLpulled1'
-          ? reply({ items: [item('vidA'), item('vidB')] })
-          : reply({ items: [item('vidB'), item('vidGone', 'Deleted video')] });
-      }
-      if (endpoint === 'videos') {
-        const ids = url.searchParams.get('id').split(',').filter((id) => id !== 'vidGone');
-        return reply({ items: ids.map((id) => ({ id, snippet: { title: `Pulled ${id}`, channelTitle: 'Chan' }, contentDetails: { duration: 'PT4M20S' } })) });
-      }
-      return reply({ error: { code: 404, message: 'unknown endpoint' } }, 404);
+    self.fetch = (url, init) => self.fakeYouTube.fetch(url, init);
+    self.PM_CONFIG.googleClientId = 'test-client.apps.googleusercontent.com';
+    self.authUrls = [];
+    chrome.identity.launchWebAuthFlow = async ({ url }) => {
+      self.authUrls.push(url);
+      const q = new URL(url).searchParams;
+      const write = q.get('scope').split(' ').includes('https://www.googleapis.com/auth/youtube');
+      return `${q.get('redirect_uri')}#access_token=${write ? 'write-token' : 'read-token'}&token_type=Bearer` +
+        `&expires_in=3599&scope=${encodeURIComponent(q.get('scope'))}&state=${q.get('state')}`;
     };
   });
 
   await button('Pull from YouTube').click();
-  await expectStatus(/Pulled 2 playlists with 4 videos\. 1 video is deleted or private\./);
-  assert.match(dialogs.at(-1), /^Replace your current folders and playlists/);
-  await expectTree(['P+ Pulled one', 'P+ Pulled two']);
-
-  const auth = new URL(await worker.evaluate(() => self.lastAuthUrl)).searchParams;
-  assert.equal(auth.get('client_id'), 'test-client.apps.googleusercontent.com');
-  assert.equal(auth.get('scope'), 'https://www.googleapis.com/auth/youtube.readonly');
-  assert.equal(auth.get('response_type'), 'token');
+  await expectStatus(/^Your library's playlists come from “You”, but you signed in as “E2E Channel”\./);
+  await statusButton('Replace library').click();
+  await expectStatus(/^Pulled 3 playlists with 6 videos, plus 3 liked videos\./);
+  await expectTree(['P+ Liked videos', 'P+ Morning run', 'P+ Deep focus', 'P+ Cooking']);
+  const auth = new URL((await worker.evaluate(() => self.authUrls))[0]).searchParams;
+  assert.equal(auth.get('scope'), 'https://www.googleapis.com/auth/youtube.readonly', 'pulling only asks to read');
   assert.equal(auth.get('redirect_uri'), `https://${EXTENSION_ID}.chromiumapp.org/`);
-
-  const stored = await storage();
-  assert.equal(stored['pm.meta'].by, 'pull');
-  assert.equal(stored['pm.videos'].vidA.contentDetails.duration, 'PT4M20S');
-  assert.equal(stored['pm.videos'].vidGone.unavailable, true);
-
-  await row('Pulled two').locator('.pm-name').click();
-  await waitFor(async () => (await tree()).includes('  V Deleted video'), 'pulled videos visible');
-  await shot('4-pulled');
 });
 
-step('loads a library saved before the app was renamed', async () => {
-  await page.waitForTimeout(500); // let the debounced save from the previous step finish
+step('organizes playlists into folders and copies videos out of Liked videos', async () => {
+  await button('Folder').click();
+  await page.keyboard.type('Fitness');
+  await page.keyboard.press('Enter');
+  await playlistRow('PLrun').dragTo(row('Fitness'));
+  for (const id of ['LL', 'PLfocus', 'PLcook']) await playlistRow(id).locator('.pm-name').click();
+  await videoIn('LL', 'Liked: funny cats').dragTo(playlistRow('PLcook'));
+  await videoIn('PLfocus', 'Focus: brown noise').dragTo(videoIn('PLcook', 'Cook: pasta'), { targetPosition: { x: 200, y: 4 } });
+  await expectTree([
+    'P- Liked videos',
+    '  V Run: warm-up',
+    '  V Liked: funny cats',
+    '  V Liked: travel vlog',
+    'P- Deep focus',
+    '  V Focus: lo-fi beats',
+    'P- Cooking',
+    '  V Focus: brown noise',
+    '  V Cook: pasta',
+    '  V Liked: funny cats',
+    'F- Fitness',
+    '  P+ Morning run',
+  ]);
+  assert.equal(await button('Push to YouTube').locator('.pm-count').innerText(), '3');
+  assert.equal(await playlistRow('PLcook').locator('.pm-badge--pending').innerText(), '2 to push');
+  assert.equal(await playlistRow('PLfocus').locator('.pm-badge--pending').innerText(), '1 to push');
+  await shot('4-to-push');
+});
+
+step('pushes changes to YouTube after showing what will change', async () => {
+  await button('Push to YouTube').click();
+  await expectStatus(/^Push 3 changes to YouTube\? This uses about 150 of your 10,000 daily API units\.\n“Deep focus”: remove 1 video\n“Cooking”: add 2 videos/);
+  assert.doesNotMatch(await page.locator(HOST).innerText(), /\bnull\b|undefined/);
+  await shot('5-push-question');
+  await statusButton('Push 3 changes').click();
+  await expectStatus(/^Pushed 3 changes to YouTube\./);
+  assert.deepEqual(await onYouTube('PLcook'), ['focus2', 'cook1', 'liked1']);
+  assert.deepEqual(await onYouTube('PLfocus'), ['focus1']);
+  assert.deepEqual(await onYouTube('LL'), ['run1', 'liked1', 'liked2'], 'Liked videos is never changed');
+  await waitFor(async () => !(await button('Push to YouTube').locator('.pm-count').isVisible()), 'nothing left to push');
+  const scopes = (await worker.evaluate(() => self.authUrls)).map((url) => new URL(url).searchParams.get('scope'));
+  assert.deepEqual(scopes, ['https://www.googleapis.com/auth/youtube.readonly', 'https://www.googleapis.com/auth/youtube'],
+    'pushing asked for permission to change playlists, once');
+});
+
+step('cancelling a push changes nothing on YouTube', async () => {
+  await playlistRow('PLrun').locator('.pm-name').click();
+  await videoIn('PLrun', 'Run: tempo').dragTo(videoIn('PLrun', 'Run: warm-up'), { targetPosition: { x: 200, y: 4 } });
+  await waitFor(async () => (await button('Push to YouTube').locator('.pm-count').innerText()) === '1', 'one change to push');
+  await button('Push to YouTube').click();
+  await expectStatus(/^Push 1 change to YouTube\?.*\n“Morning run”: reorder \(1 move\)/);
+  await statusButton('Cancel').click();
+  await expectStatus(/^Push cancelled\. Nothing was changed on YouTube\./);
+  assert.deepEqual(await onYouTube('PLrun'), ['run1', 'run2', 'run3']);
+  assert.equal(await button('Push to YouTube').locator('.pm-count').innerText(), '1');
+});
+
+step('pulling again brings in YouTube changes without touching your folders', async () => {
+  await worker.evaluate(() => {
+    self.fakeYouTube.addVideo('PLrun', 'new1');
+    self.fakeYouTube.addPlaylist('PLguitar', 'Guitar', ['new2']);
+    self.fakeYouTube.addVideo('LL', 'liked3', 0);
+  });
+  await button('Pull from YouTube').click();
+  await expectStatus(/^Pulled the latest from YouTube\. 1 change made here isn't on YouTube yet; Push to send it\.\nNew playlist “Guitar” \(1 video\), added at the top level\n“Morning run”: 1 new video/);
+  await expectTree([
+    'P- Liked videos',
+    '  V Liked: space documentary',
+    '  V Run: warm-up',
+    '  V Liked: funny cats',
+    '  V Liked: travel vlog',
+    'P- Deep focus',
+    '  V Focus: lo-fi beats',
+    'P- Cooking',
+    '  V Focus: brown noise',
+    '  V Cook: pasta',
+    '  V Liked: funny cats',
+    'F- Fitness',
+    '  P- Morning run',
+    '    V Run: tempo',
+    '    V Run: warm-up',
+    '    V Run: cool-down',
+    '    V Run: hill sprints',
+    'P+ Guitar',
+  ]);
+});
+
+step('Liked videos stays read-only', async () => {
+  const before = await tree();
+  await videoIn('PLcook', 'Cook: pasta').dragTo(playlistRow('LL'));
+  await page.waitForTimeout(300);
+  assert.deepEqual(await tree(), before);
+  await videoIn('LL', 'Liked: travel vlog').locator('.pm-index').click();
+  assert.equal(await page.locator(`${HOST} .pm-selection .pm-btn--danger`).isDisabled(), true);
+  await page.keyboard.press('Escape');
+});
+
+step('pushes the remaining reorder', async () => {
+  await button('Push to YouTube').click();
+  await statusButton('Push 1 change').click();
+  await expectStatus(/^Pushed 1 change to YouTube\./);
+  assert.deepEqual(await onYouTube('PLrun'), ['run2', 'run1', 'run3', 'new1']);
+  await shot('6-synced');
+});
+
+step('loads a library saved by older versions', async () => {
+  await page.waitForTimeout(500); // let any debounced save finish
+  const before = await tree();
   await worker.evaluate(async () => {
     const { 'pm.structure': structure } = await chrome.storage.local.get('pm.structure');
     await chrome.storage.local.set({
-      'pm.structure': { ...structure, format: 'playlist-manager' },
+      'pm.structure': { ...structure, format: 'playlist-manager', version: 1 },
       'pm.meta': { rev: Date.now(), by: 'old-version' },
     });
   });
   await page.reload();
-  await expectTree(['P+ Pulled one', 'P- Pulled two', '  V Pulled vidB', '  V Deleted video']);
+  await expectTree(before);
   assert.equal(await page.locator(`${HOST} .pm-status[data-kind="error"]`).count(), 0, 'no "damaged library" error');
-  await row('Pulled one').locator('.pm-name').click();
-  await waitFor(async () => (await storage())['pm.structure'].format === 'youtube-playlist-manager', 'format name updated on the next save');
+  await playlistRow('PLguitar').locator('.pm-name').click();
+  await waitFor(async () => {
+    const { format, version } = (await storage())['pm.structure'];
+    return format === 'youtube-playlist-manager' && version === 2;
+  }, 'format name and version updated on the next save');
 });
 
 // --- runner -------------------------------------------------------------------------
