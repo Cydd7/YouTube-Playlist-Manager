@@ -1,8 +1,8 @@
 {
   "manifest_version": 3,
   "name": "YouTube Playlist Manager",
-  "version": "0.1.0",
-  "description": "Organize your YouTube playlists into folders, move videos between playlists, and back everything up as one JSON file.",
+  "version": "0.2.0",
+  "description": "Organize your YouTube playlists into folders, sync your changes back to YouTube, and back everything up as one JSON file.",
   "key": "MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEAvhTkqC6wNDiniGLWe8RKps68dMdaqSqL4kjEpp1VOUkIRWml8Qn2gALLRBhKBxKGXsWhuJ7cqIY+n3JomZFtG48jzFBI4C9pl7OkUnz3jA3EGGabmusASyfVZWoVVvLiN6ndUeLCnBWsHUdfekJo3Ynnmtq999GXl9ULvvSz8jEdi+SOx80SXjaPAJMRvEDA5OVycfelKY14mWSzPdrfgqfdFMUHZObvzZ8tjD6cSkBpAuvnell4ElgQGWIyImb0uV9Vx5JuKlv73ulBSDz+VUBQekXZ5WHTZQ7UcbhT3pTFhqat4xoPC3som41wL3y6EeCjjMknZTg3tVanm/J8wQIDAQAB",
   "minimum_chrome_version": "116",
   "icons": {
@@ -21,18 +21,27 @@
   "background": {
     "service_worker": "background.js"
   },
-  "permissions": ["storage", "unlimitedStorage", "identity"],
-  "host_permissions": ["https://www.googleapis.com/*"],
+  "permissions": [
+    "storage",
+    "unlimitedStorage",
+    "identity"
+  ],
+  "host_permissions": [
+    "https://www.googleapis.com/*"
+  ],
   "content_scripts": [
     {
-      "matches": ["https://www.youtube.com/*"],
+      "matches": [
+        "https://www.youtube.com/*"
+      ],
       "js": [
         "lib/model.js",
         "lib/storage.js",
+        "lib/sync.js",
         "content/dom.js",
         "content/styles.js",
         "content/dnd.js",
-        "content/pull.js",
+        "content/sync.js",
         "content/dashboard.js",
         "content/main.js"
       ],

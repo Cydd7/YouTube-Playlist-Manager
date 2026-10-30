@@ -27,6 +27,8 @@
   --pm-danger-soft: rgba(204, 0, 0, 0.08);
   --pm-success: #107c10;
   --pm-thumb: #e5e5e5;
+  --pm-on-accent: #ffffff;
+  --pm-mark: rgba(255, 200, 0, 0.45);
   --pm-indent: 20px;
 
   box-sizing: border-box;
@@ -53,6 +55,8 @@
   --pm-danger-soft: rgba(255, 107, 107, 0.12);
   --pm-success: #6bd66b;
   --pm-thumb: #303030;
+  --pm-on-accent: #0f0f0f;
+  --pm-mark: rgba(255, 200, 0, 0.35);
 }
 
 .pm *, .pm *::before, .pm *::after { box-sizing: inherit; }
@@ -125,6 +129,21 @@
 
 .pm-btn:hover { background: var(--pm-hover); box-shadow: inset 0 0 0 1px var(--pm-border); }
 .pm-btn:disabled { opacity: 0.5; cursor: default; }
+.pm-btn--primary { background: var(--pm-accent); color: var(--pm-on-accent); }
+.pm-btn--primary:hover { background: var(--pm-accent); filter: brightness(1.1); }
+.pm-btn--danger { color: var(--pm-danger); }
+
+.pm-count {
+  min-width: 20px;
+  height: 20px;
+  padding: 0 6px;
+  border-radius: 10px;
+  background: var(--pm-accent);
+  color: var(--pm-on-accent);
+  font-size: 12px;
+  line-height: 20px;
+  text-align: center;
+}
 .pm-btn .pm-icon { width: 16px; height: 16px; }
 
 .pm-icon-btn {
@@ -144,6 +163,7 @@
 }
 
 .pm-icon-btn:hover { background: var(--pm-hover); color: var(--pm-text); }
+.pm-icon-btn:disabled { opacity: 0.4; cursor: default; background: transparent; }
 .pm-icon-btn.pm-danger:hover { background: var(--pm-danger-soft); color: var(--pm-danger); }
 .pm-icon-btn .pm-icon { width: 16px; height: 16px; }
 
@@ -169,15 +189,73 @@
 }
 
 .pm-status[data-kind="error"] { background: var(--pm-danger-soft); color: var(--pm-danger); }
+.pm-status[data-kind="ask"] { box-shadow: inset 0 0 0 1px var(--pm-accent); }
+.pm-status-actions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 8px; }
 .pm-status[data-kind="success"] { color: var(--pm-success); }
 .pm-status-text { flex: 1; min-width: 0; padding-top: 4px; overflow-wrap: anywhere; }
 .pm-status-text ul { margin: 4px 0 0; padding-left: 18px; }
 .pm-status .pm-icon-btn { color: inherit; }
 
-/* Tree ----------------------------------------------------------------------- */
+/* Tools: search, folder, undo and the selection ---------------------------------- */
 
 .pm-body { border-top: 1px solid var(--pm-border); }
-.pm-body[hidden] { display: none; }
+
+.pm-tools {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 12px;
+  border-bottom: 1px solid var(--pm-border);
+}
+
+.pm-search {
+  position: relative;
+  display: flex;
+  align-items: center;
+  flex: 1 1 220px;
+  max-width: 420px;
+}
+
+.pm-search .pm-icon {
+  position: absolute;
+  left: 10px;
+  width: 16px;
+  height: 16px;
+  color: var(--pm-muted);
+  pointer-events: none;
+}
+
+.pm-search-input {
+  width: 100%;
+  height: 32px;
+  padding: 0 12px 0 34px;
+  border: 1px solid var(--pm-border);
+  border-radius: 16px;
+  background: var(--pm-bg);
+  color: var(--pm-text);
+  font: inherit;
+}
+
+.pm-search-input:focus { outline: none; border-color: var(--pm-accent); box-shadow: 0 0 0 2px var(--pm-accent-soft); }
+
+.pm-selection {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-left: auto;
+  font-size: 13px;
+}
+
+.pm-selection-count { color: var(--pm-muted); white-space: nowrap; }
+
+.pm mark {
+  border-radius: 2px;
+  background: var(--pm-mark);
+  color: inherit;
+}
+
+/* Tree ----------------------------------------------------------------------- */
 
 .pm-tree {
   max-height: min(60vh, 640px);
@@ -188,6 +266,8 @@
 }
 
 .pm-tree.pm-busy { opacity: 0.5; pointer-events: none; }
+.pm-tree:focus { outline: none; }
+.pm-tree:focus-visible { outline: 2px solid var(--pm-accent); outline-offset: -2px; }
 
 .pm-row {
   --depth: 0;
@@ -202,6 +282,7 @@
 }
 
 .pm-row:hover { background: var(--pm-hover); }
+.pm-row.pm-selected, .pm-row.pm-selected:hover { background: var(--pm-accent-soft); }
 .pm-row--folder, .pm-row--playlist { cursor: pointer; }
 .pm-row--video { min-height: 44px; }
 .pm-row.pm-dragging { opacity: 0.4; }
@@ -226,6 +307,7 @@
 
 .pm-kind { color: var(--pm-muted); }
 .pm-row--folder .pm-kind { color: var(--pm-accent); }
+.pm-row--liked .pm-kind { color: var(--pm-danger); }
 
 .pm-name {
   min-width: 0;
@@ -252,6 +334,12 @@
   font-size: 11px;
   line-height: 18px;
   text-transform: capitalize;
+}
+
+.pm-badge--pending {
+  background: var(--pm-accent-soft);
+  color: var(--pm-accent);
+  text-transform: none;
 }
 
 .pm-spacer { flex: 1; }

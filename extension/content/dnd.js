@@ -3,6 +3,8 @@
  *
  * zoneFor() and resolveDrop() decide what a drop would do; they are pure and
  * unit-tested. attach() wires them to the browser's native drag events.
+ * Several selected rows can be dragged together. Videos are copied instead of
+ * moved when Alt or Ctrl is held, or when they come from Liked videos.
  */
 (() => {
   'use strict';
@@ -29,7 +31,7 @@
   /**
    * What dropping `drag` on `target` in `zone` would do, or null when it isn't allowed.
    *
-   *   drag    { kind: 'folder' | 'playlist', id }  or  { kind: 'video', playlist, index }
+   *   drag    { kind: 'node', ids: [folder or playlist IDs] }  or  { kind: 'video', items: [{ playlist, index }] }
    *   target  { kind: 'folder' | 'playlist', id, parent, index, open }
    *           { kind: 'video', playlist, index }
    *           { kind: 'empty', container }   placeholder row inside an open, empty folder or playlist
@@ -43,13 +45,14 @@
     if (!drag || !target || !zone) return null;
 
     if (drag.kind === 'video') {
-      if (target.kind === 'playlist' && zone === 'inside' && M.isPlaylist(doc, target.id)) {
+      const editable = (id) => M.isPlaylist(doc, id) && !M.isReadOnly(doc.playlists[id]);
+      if (target.kind === 'playlist' && zone === 'inside' && editable(target.id)) {
         return { type: 'video', playlist: target.id, index: doc.playlists[target.id].items.length };
       }
-      if (target.kind === 'video' && zone !== 'inside') {
+      if (target.kind === 'video' && zone !== 'inside' && editable(target.playlist)) {
         return { type: 'video', playlist: target.playlist, index: target.index + (zone === 'after' ? 1 : 0) };
       }
-      if (target.kind === 'empty' && M.isPlaylist(doc, target.container)) {
+      if (target.kind === 'empty' && editable(target.container)) {
         return { type: 'video', playlist: target.container, index: 0 };
       }
       return null;
@@ -76,11 +79,11 @@
     } else {
       return null;
     }
-    if (target.id === drag.id || !M.canMoveNode(doc, drag.id, parent)) return null;
+    if (drag.ids.includes(target.id) || !drag.ids.every((id) => M.canMoveNode(doc, id, parent))) return null;
     return { type: 'node', parent, index };
   }
 
-  /** Reads the drag/drop description that the dashboard stores in a row's data attributes. */
+  /** Reads the drop-target description that the dashboard stores in a row's data attributes. */
   function describeRow(row) {
     const d = row.dataset;
     switch (d.kind) {
@@ -96,6 +99,8 @@
     }
   }
 
+  const wantsCopy = (e) => e.altKey || e.ctrlKey || e.metaKey;
+
   function autoScroll(scroller, clientY) {
     const rect = scroller.getBoundingClientRect();
     if (clientY < rect.top + SCROLL_EDGE) scroller.scrollTop -= SCROLL_STEP;
@@ -104,7 +109,8 @@
 
   /**
    * Wires drag and drop to `tree`. The dashboard (`app`) provides:
-   *   app.doc, app.setDragSource(row, drag), app.openWhileDragging(id), app.applyDrop(drag, result)
+   *   app.doc, app.beginDrag(row) → drag description (or null), app.endDrag(),
+   *   app.openWhileDragging(id), app.applyDrop(drag, result, { copy })
    */
   function attach(app, tree) {
     let drag = null;
@@ -123,14 +129,15 @@
       openTarget = null;
     };
     const reset = () => {
+      if (!drag) return;
       drag = null;
       pending = null;
       unmark();
       cancelAutoOpen();
-      app.setDragSource(null);
+      app.endDrag();
     };
 
-    // Hovering over a closed folder (or a closed playlist while dragging a video) opens it.
+    // Hovering over a closed folder (or a closed playlist while dragging videos) opens it.
     const autoOpen = (target, zone) => {
       const closed = zone === 'inside' && (target.kind === 'folder' || target.kind === 'playlist') && !target.open;
       const id = closed ? target.id : null;
@@ -147,12 +154,11 @@
     tree.addEventListener('dragstart', (e) => {
       const row = e.target.closest?.('.pm-row');
       if (!row || row.getAttribute('draggable') !== 'true') return;
-      drag = describeRow(row);
+      drag = app.beginDrag(row);
       if (!drag) return;
-      e.dataTransfer.effectAllowed = 'move';
+      e.dataTransfer.effectAllowed = 'copyMove';
       e.dataTransfer.setData('text/plain', row.dataset.label || '');
       row.addEventListener('dragend', reset, { once: true });
-      app.setDragSource(row, drag);
     });
 
     tree.addEventListener('dragover', (e) => {
@@ -175,7 +181,7 @@
         return;
       }
       e.preventDefault();
-      e.dataTransfer.dropEffect = 'move';
+      e.dataTransfer.dropEffect = drag.kind === 'video' && (drag.fromReadOnly || wantsCopy(e)) ? 'copy' : 'move';
       marked = row || tree;
       marked.classList.add(row ? `pm-drop-${zone}` : 'pm-drop-end');
       autoOpen(target, zone);
@@ -195,7 +201,7 @@
       const source = drag;
       const result = pending;
       reset();
-      if (result) app.applyDrop(source, result);
+      if (result) app.applyDrop(source, result, { copy: wantsCopy(e) });
     });
   }
 

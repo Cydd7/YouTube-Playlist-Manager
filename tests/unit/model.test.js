@@ -213,31 +213,111 @@ test('parseBackup fills in missing open flags and keeps extra per-item fields', 
   assert.equal(restored.playlists.P1.items[0].note, 'keep me');
 });
 
-test('buildFromYouTube turns API resources into a document', () => {
-  const pl = (id, title) => ({ kind: 'youtube#playlist', etag: 'e', id, snippet: { title, localized: { title, description: '' }, description: '' }, status: { privacyStatus: 'private' } });
-  const item = (videoId, extra = {}) => ({ snippet: { publishedAt: '2024-01-01T00:00:00Z', title: `t-${videoId}`, resourceId: { videoId } }, contentDetails: { videoId }, ...extra });
-  const doc = M.buildFromYouTube({
-    playlists: [pl('PA', 'Alpha'), pl('PB', 'Beta'), pl('PA', 'Alpha again')],
-    items: {
-      PA: [item('v1'), item('v2', { contentDetails: { videoId: 'v2', note: 'hi' } })],
-      PB: [item('v1'), item('gone', { snippet: { title: 'Deleted video', resourceId: { videoId: 'gone' } }, status: { privacyStatus: 'privacyStatusUnspecified' } })],
-    },
-    videos: {
-      v1: { kind: 'youtube#video', etag: 'e', id: 'v1', snippet: { title: 'One', description: 'd', localized: { title: 'One', description: 'd' } } },
-      v2: { kind: 'youtube#video', etag: 'e', id: 'v2', snippet: { title: 'Two', description: 'd', localized: { title: 'Zwei', description: 'd' } } },
-    },
-  });
+test('cleanResource drops API bookkeeping and repeated translations', () => {
+  const raw = { kind: 'youtube#video', etag: 'e', id: 'v1', snippet: { title: 'One', description: 'd', localized: { title: 'One', description: 'd' } } };
+  assert.deepEqual(M.cleanResource(raw), { id: 'v1', snippet: { title: 'One', description: 'd' } });
+  const translated = { id: 'v2', snippet: { title: 'Two', description: 'd', localized: { title: 'Zwei', description: 'd' } } };
+  assert.equal(M.cleanResource(translated).snippet.localized.title, 'Zwei');
+});
 
-  assert.deepEqual(doc.root, ['PA', 'PB']);
-  assert.equal(doc.playlists.PA.title, 'Alpha');
-  assert.deepEqual(doc.playlists.PA.youtube, { id: 'PA', snippet: { title: 'Alpha', description: '' }, status: { privacyStatus: 'private' } });
-  assert.deepEqual(doc.playlists.PA.items, [
-    { videoId: 'v1', addedAt: '2024-01-01T00:00:00Z' },
-    { videoId: 'v2', addedAt: '2024-01-01T00:00:00Z', note: 'hi' },
-  ]);
-  assert.deepEqual(items(doc, 'PB'), ['v1', 'gone']);
-  assert.deepEqual(doc.videos.v1, { id: 'v1', snippet: { title: 'One', description: 'd' } }, 'kind, etag and a duplicate localized copy are dropped');
-  assert.equal(doc.videos.v2.snippet.localized.title, 'Zwei', 'a real translation is kept');
-  assert.deepEqual(doc.videos.gone, { id: 'gone', unavailable: true, snippet: { title: 'Deleted video' }, status: { privacyStatus: 'privacyStatusUnspecified' } });
+test('moveNodes moves several folders and playlists together, in order', () => {
+  const doc = makeDoc();
+  const C = M.addFolder(doc, 'root', 'C');
+  assert.equal(M.moveNodes(doc, ['P1', 'P2', 'B'], C), true);
+  assert.deepEqual(doc.folders[C].children, ['P1', 'P2', 'B']);
+  assert.deepEqual(doc.root, ['A', C]);
+  assert.deepEqual(doc.folders.A.children, []);
+
+  // Dropping before an entry that is itself moving lands before the next one that isn't.
+  assert.equal(M.moveNodes(doc, ['B', 'P1'], C, 1), true);
+  assert.deepEqual(doc.folders[C].children, ['B', 'P1', 'P2']);
+  assert.equal(M.moveNodes(doc, ['B', 'P1'], C, 0), false, 'already there');
+
+  assert.equal(M.moveNodes(doc, ['A', 'B'], 'B'), false, 'one bad move cancels the whole move');
   assert.deepEqual(M.validate(doc), []);
+});
+
+test('moveVideos moves several videos, keeping their order', () => {
+  const doc = makeDoc();
+  assert.equal(M.moveVideos(doc, [{ playlist: 'P1', index: 2 }, { playlist: 'P1', index: 0 }], 'P2', 0), true);
+  assert.deepEqual(items(doc, 'P2'), ['v3', 'v1', 'v4']);
+  assert.deepEqual(items(doc, 'P1'), ['v2']);
+  // The same video picked twice is only moved once.
+  assert.equal(M.moveVideos(doc, [{ playlist: 'P2', index: 0 }, { playlist: 'P2', index: 0 }], 'P3'), true);
+  assert.deepEqual(items(doc, 'P3'), ['v3']);
+  assert.deepEqual(items(doc, 'P2'), ['v1', 'v4']);
+});
+
+test('moved entries keep their YouTube ID; copies are new entries', () => {
+  const doc = makeDoc();
+  doc.playlists.P1.items[0].itemId = 'yt-1';
+  const moved = doc.playlists.P1.items[0];
+  M.moveVideo(doc, 'P1', 0, 'P2');
+  assert.equal(doc.playlists.P2.items.at(-1), moved, 'the same entry object, not a copy');
+  assert.equal(M.moveVideos(doc, [{ playlist: 'P2', index: 1 }], 'P3', 0, { copy: true }), true);
+  assert.deepEqual(doc.playlists.P3.items, [{ videoId: 'v1' }]);
+  assert.deepEqual(items(doc, 'P2'), ['v4', 'v1']);
+});
+
+test('Liked videos is read-only: copied from, never moved into, removed from or reordered', () => {
+  const doc = makeDoc();
+  doc.playlists.P1.kind = 'liked';
+  assert.equal(M.moveVideo(doc, 'P1', 0, 'P2', 0), true);
+  assert.deepEqual(items(doc, 'P1'), ['v1', 'v2', 'v3'], 'dragging out copies');
+  assert.deepEqual(items(doc, 'P2'), ['v1', 'v4']);
+  assert.equal(M.moveVideo(doc, 'P2', 0, 'P1', 0), false);
+  assert.equal(M.moveVideo(doc, 'P1', 2, 'P1', 0), false);
+  assert.equal(M.removeVideos(doc, [{ playlist: 'P1', index: 0 }]), 0);
+});
+
+test('removeVideos removes the picked entries', () => {
+  const doc = makeDoc();
+  assert.equal(M.removeVideos(doc, [{ playlist: 'P1', index: 0 }, { playlist: 'P1', index: 2 }, { playlist: 'P1', index: 2 }, { playlist: 'P2', index: 0 }]), 3);
+  assert.deepEqual(items(doc, 'P1'), ['v2']);
+  assert.deepEqual(items(doc, 'P2'), []);
+  assert.deepEqual(M.validate(doc), []);
+});
+
+test('snapshot and restore undo edits but keep open and closed state', () => {
+  const doc = makeDoc();
+  const snap = M.snapshot(doc);
+  const newFolder = M.addFolder(doc, 'A', 'New');
+  M.renameFolder(doc, 'B', 'Renamed');
+  M.moveVideo(doc, 'P1', 0, 'P3');
+  M.removeVideos(doc, [{ playlist: 'P2', index: 0 }]);
+  M.setOpen(doc, 'B', true);
+
+  M.restore(doc, snap);
+  assert.equal(M.isFolder(doc, newFolder), false);
+  assert.equal(doc.folders.B.name, 'B');
+  assert.deepEqual(items(doc, 'P1'), ['v1', 'v2', 'v3']);
+  assert.deepEqual(items(doc, 'P2'), ['v4']);
+  assert.deepEqual(items(doc, 'P3'), []);
+  assert.equal(doc.folders.B.open, true, 'opening a folder is not undone');
+  assert.deepEqual(M.validate(doc), []);
+});
+
+test('version 2 fields are checked, and version 1 files still load', () => {
+  const doc = makeDoc();
+  doc.playlists.P1.items[0].itemId = 'yt-1';
+  doc.playlists.P1.synced = ['yt-1'];
+  doc.playlists.P2.kind = 'liked';
+  doc.sync = { channelId: 'UC1', pulledAt: '2026-01-01T00:00:00Z' };
+  assert.deepEqual(M.validate(doc), []);
+  assert.deepEqual(M.parseBackup(JSON.stringify(M.toBackup(doc))).sync, doc.sync);
+
+  const cases = [
+    [(d) => { d.playlists.P1.items[0].itemId = 5; }, /"itemId" must be text/],
+    [(d) => { d.playlists.P1.synced = 'yt-1'; }, /"synced" must be a list/],
+    [(d) => { d.playlists.P2.kind = 'favourite'; }, /unknown "kind"/],
+    [(d) => { d.sync = []; }, /"sync" must be an object/],
+  ];
+  for (const [mutate, expected] of cases) {
+    const broken = structuredClone(doc);
+    mutate(broken);
+    assert.ok(M.validate(broken).some((p) => expected.test(p)), String(expected));
+  }
+
+  const v1 = { ...M.toBackup(makeDoc()), version: 1 };
+  assert.equal(M.parseBackup(JSON.stringify(v1)).version, 2);
 });

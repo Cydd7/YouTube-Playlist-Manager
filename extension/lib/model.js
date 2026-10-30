@@ -5,12 +5,19 @@
  *
  *   root       IDs of the top-level folders and playlists, in display order
  *   folders    { [folderId]:   { name, open, children: [folderId | playlistId] } }
- *   playlists  { [playlistId]: { title, open, items: [{ videoId, addedAt }], youtube } }
+ *   playlists  { [playlistId]: { title, open, items: [{ videoId, addedAt, itemId }], youtube, synced, kind } }
  *   videos     { [videoId]:    video data exactly as the YouTube Data API returned it }
+ *   sync       { channelId, channelTitle, pulledAt, pushedAt }   (after the first pull)
+ *
+ * For syncing, a playlist entry's `itemId` is its ID on YouTube, and a
+ * playlist's `synced` lists the YouTube entry IDs it had at the last pull or
+ * push (see sync.js). `kind: 'liked'` marks the read-only Liked videos list.
  *
  * Rules: a folder holds folders and playlists, a playlist holds videos, and
  * every folder and playlist sits in exactly one place. A video's details are
- * stored once even when it is in several playlists.
+ * stored once even when it is in several playlists. Entry objects are never
+ * changed in place by edits (they are only moved, copied or removed), which is
+ * what lets undo snapshots share them.
  *
  * Everything here is plain data manipulation (no DOM, no chrome.* APIs) so the
  * same file runs in the content script, the service worker and Node tests.
@@ -23,8 +30,9 @@
   const FORMAT = 'youtube-playlist-manager';
   // Backups made before the app was renamed say "playlist-manager"; the format is the same.
   const LEGACY_FORMATS = ['playlist-manager'];
-  const VERSION = 1;
+  const VERSION = 2;
   const ROOT = 'root';
+  const LIKED = 'liked';
   const MAX_PROBLEMS = 50;
 
   const hasOwn = (obj, key) => Object.prototype.hasOwnProperty.call(obj, key);
@@ -39,6 +47,8 @@
   const getFolder = (doc, id) => (isFolder(doc, id) ? doc.folders[id] : null);
   const getPlaylist = (doc, id) => (isPlaylist(doc, id) ? doc.playlists[id] : null);
   const getVideo = (doc, id) => (hasOwn(doc.videos, id) ? doc.videos[id] : null);
+  /** Liked videos mirrors YouTube and can't be edited here; videos dragged out of it are copied. */
+  const isReadOnly = (playlist) => playlist?.kind === LIKED;
 
   function isEmpty(doc) {
     return doc.root.length === 0 && Object.keys(doc.folders).length === 0 && Object.keys(doc.playlists).length === 0;
@@ -89,6 +99,19 @@
     return text || fallback;
   }
 
+  /** Drops repeated references to the same entry (by object identity). */
+  function uniqueItems(picked) {
+    const seen = new Set();
+    return picked.filter((p) => !p.item || (!seen.has(p.item) && seen.add(p.item)));
+  }
+
+  /** Runs `change` and reports whether any of `lists` ended up different. */
+  function changes(lists, change) {
+    const before = lists.map((list) => [...list]);
+    if (change() === false) return false;
+    return lists.some((list, k) => list.length !== before[k].length || list.some((x, i) => x !== before[k][i]));
+  }
+
   // ---------------------------------------------------------------------------
   // Editing
 
@@ -122,27 +145,17 @@
     return { parent, moved: folder.children.length };
   }
 
+  /** Deletes several folders; returns how many were deleted. */
+  function deleteFolders(doc, ids) {
+    return ids.filter((id) => deleteFolder(doc, id)).length;
+  }
+
   /** Opens or closes a folder or playlist (`open` omitted: toggle). Returns the new state. */
   function setOpen(doc, id, open) {
     const node = getFolder(doc, id) || getPlaylist(doc, id);
     if (!node) return null;
     node.open = open === undefined ? !node.open : Boolean(open);
     return node.open;
-  }
-
-  /**
-   * Moves `from[fromIndex]` so that it lands before the element currently at
-   * `to[index]` (index omitted or past the end: append). Returns false for a no-op.
-   */
-  function moveBetween(from, fromIndex, to, index) {
-    let at = index == null ? to.length : Math.max(0, Math.min(index, to.length));
-    if (from === to) {
-      if (at > fromIndex) at--;
-      if (at === fromIndex) return false;
-    }
-    const [entry] = from.splice(fromIndex, 1);
-    to.splice(at, 0, entry);
-    return true;
   }
 
   /** Whether a folder or playlist may go into `toParent` (ROOT or a folder). */
@@ -153,21 +166,91 @@
     return true;
   }
 
-  /** Moves a folder or playlist into `toParent`, before the entry now at `index`. */
-  function moveNode(doc, id, toParent, index) {
-    if (!canMoveNode(doc, id, toParent)) return false;
-    const from = childrenOf(doc, parentOf(doc, id));
-    if (!from) return false;
-    return moveBetween(from, from.indexOf(id), childrenOf(doc, toParent), index);
+  /**
+   * Moves folders and playlists (in the given order) into `toParent`, before the
+   * entry currently at `index` (end when omitted). Returns false if nothing changed.
+   */
+  function moveNodes(doc, nodeIds, toParent, index) {
+    const ids = [...new Set(nodeIds)];
+    if (!ids.length || !ids.every((id) => canMoveNode(doc, id, toParent))) return false;
+    const target = childrenOf(doc, toParent);
+    const sources = ids.map((id) => childrenOf(doc, parentOf(doc, id)));
+    if (sources.some((list) => !list)) return false;
+    return changes([target, ...sources], () => {
+      const moving = new Set(ids);
+      const before = target.slice(index ?? target.length).find((id) => !moving.has(id)) ?? null;
+      ids.forEach((id, k) => sources[k].splice(sources[k].indexOf(id), 1));
+      target.splice(before === null ? target.length : target.indexOf(before), 0, ...ids);
+    });
   }
 
-  /** Moves the video at `fromIndex` of one playlist into another (or the same) playlist. */
-  function moveVideo(doc, fromPlaylist, fromIndex, toPlaylist, index) {
-    const source = getPlaylist(doc, fromPlaylist);
+  function moveNode(doc, id, toParent, index) {
+    return moveNodes(doc, [id], toParent, index);
+  }
+
+  /**
+   * Moves videos into a playlist, before the entry currently at `index` (end when
+   * omitted). `refs` are { playlist, index } in the order they should land.
+   * With `copy`, or when they come from a read-only playlist, the videos are
+   * copied instead. Returns false if nothing changed.
+   */
+  function moveVideos(doc, refs, toPlaylist, index, { copy = false } = {}) {
     const target = getPlaylist(doc, toPlaylist);
-    if (!source || !target) return false;
-    if (!Number.isInteger(fromIndex) || fromIndex < 0 || fromIndex >= source.items.length) return false;
-    return moveBetween(source.items, fromIndex, target.items, index);
+    if (!target || isReadOnly(target) || !refs.length) return false;
+    const picked = uniqueItems(refs.map((ref) => {
+      const source = getPlaylist(doc, ref.playlist);
+      return { source, item: source?.items[ref.index], copy: copy || isReadOnly(source) };
+    }));
+    if (picked.some((p) => !p.item)) return false;
+    return changes([target.items, ...picked.map((p) => p.source.items)], () => {
+      const moving = new Set(picked.filter((p) => !p.copy).map((p) => p.item));
+      const before = target.items.slice(index ?? target.items.length).find((item) => !moving.has(item)) ?? null;
+      const entries = picked.map(({ source, item, copy: isCopy }) => {
+        // A copy is a new playlist entry: it only knows which video it is.
+        if (isCopy) return { videoId: item.videoId };
+        source.items.splice(source.items.indexOf(item), 1);
+        return item;
+      });
+      target.items.splice(before === null ? target.items.length : target.items.indexOf(before), 0, ...entries);
+    });
+  }
+
+  function moveVideo(doc, fromPlaylist, fromIndex, toPlaylist, index) {
+    return moveVideos(doc, [{ playlist: fromPlaylist, index: fromIndex }], toPlaylist, index);
+  }
+
+  /** Removes videos ({ playlist, index }) from their playlists; returns how many were removed. */
+  function removeVideos(doc, refs) {
+    const picked = uniqueItems(refs
+      .map((ref) => ({ source: getPlaylist(doc, ref.playlist), index: ref.index }))
+      .filter(({ source }) => source && !isReadOnly(source))
+      .map(({ source, index }) => ({ source, item: source.items[index] }))
+      .filter(({ item }) => item));
+    for (const { source, item } of picked) source.items.splice(source.items.indexOf(item), 1);
+    return picked.length;
+  }
+
+  /** Captures what edits can change, for undo. Entries are shared, not copied (they never change in place). */
+  function snapshot(doc) {
+    return {
+      root: [...doc.root],
+      folders: Object.fromEntries(Object.entries(doc.folders).map(([id, f]) => [id, { ...f, children: [...f.children] }])),
+      items: Object.fromEntries(Object.entries(doc.playlists).map(([id, p]) => [id, [...p.items]])),
+    };
+  }
+
+  /** Puts back a snapshot, keeping folders and playlists open or closed as they are now. */
+  function restore(doc, snap) {
+    const openNow = (node, fallback) => (node ? node.open : fallback);
+    const folders = {};
+    for (const [id, folder] of Object.entries(snap.folders)) {
+      folders[id] = { ...folder, children: [...folder.children], open: openNow(getFolder(doc, id), folder.open) };
+    }
+    doc.root = [...snap.root];
+    doc.folders = folders;
+    for (const [id, items] of Object.entries(snap.items)) {
+      if (isPlaylist(doc, id)) doc.playlists[id].items = [...items];
+    }
   }
 
   // ---------------------------------------------------------------------------
@@ -245,6 +328,7 @@
       else hidden++;
     };
     const done = () => (hidden ? [...problems, `…and ${hidden} more problems.`] : problems);
+    const isStringList = (v) => Array.isArray(v) && v.every((x) => typeof x === 'string');
 
     if (!isPlainObject(doc)) return ['The file does not contain a JSON object.'];
     if (doc.format !== FORMAT && !LEGACY_FORMATS.includes(doc.format)) {
@@ -258,6 +342,7 @@
     for (const key of ['folders', 'playlists', 'videos']) {
       if (!isPlainObject(doc[key])) fail(`"${key}" must be an object.`);
     }
+    if (doc.sync !== undefined && !isPlainObject(doc.sync)) fail('"sync" must be an object.');
     if (problems.length) return done();
 
     const label = (id) => {
@@ -274,9 +359,7 @@
         continue;
       }
       if (typeof folder.name !== 'string') fail(`Folder "${id}" needs a "name".`);
-      if (!Array.isArray(folder.children) || folder.children.some((c) => typeof c !== 'string')) {
-        fail(`Folder "${id}" needs a "children" list of IDs.`);
-      }
+      if (!isStringList(folder.children)) fail(`Folder "${id}" needs a "children" list of IDs.`);
       if (folder.open !== undefined && typeof folder.open !== 'boolean') fail(`Folder "${id}": "open" must be true or false.`);
     }
 
@@ -288,6 +371,8 @@
       }
       if (typeof playlist.title !== 'string') fail(`Playlist "${id}" needs a "title".`);
       if (playlist.open !== undefined && typeof playlist.open !== 'boolean') fail(`Playlist "${id}": "open" must be true or false.`);
+      if (playlist.kind !== undefined && playlist.kind !== LIKED) fail(`Playlist "${id}": unknown "kind".`);
+      if (playlist.synced !== undefined && !isStringList(playlist.synced)) fail(`Playlist "${id}": "synced" must be a list of IDs.`);
       if (!Array.isArray(playlist.items)) {
         fail(`Playlist "${id}" needs an "items" list.`);
         continue;
@@ -297,6 +382,8 @@
           fail(`Playlist "${id}", item ${i + 1}: needs a "videoId".`);
         } else if (!hasOwn(doc.videos, item.videoId)) {
           fail(`Playlist "${id}", item ${i + 1}: video "${item.videoId}" is missing from "videos".`);
+        } else if (item.itemId !== undefined && typeof item.itemId !== 'string') {
+          fail(`Playlist "${id}", item ${i + 1}: "itemId" must be text.`);
         }
       });
     }
@@ -352,6 +439,7 @@
       doc.playlists[id] = { ...playlist, open: playlist.open === true, items: playlist.items.map((item) => ({ ...item })) };
     }
     doc.videos = { ...data.videos };
+    if (data.sync) doc.sync = { ...data.sync };
     return doc;
   }
 
@@ -373,6 +461,7 @@
       format: FORMAT,
       version: VERSION,
       exportedAt: now.toISOString(),
+      ...(doc.sync ? { sync: doc.sync } : {}),
       root: doc.root,
       folders: doc.folders,
       playlists: doc.playlists,
@@ -381,7 +470,7 @@
   }
 
   // ---------------------------------------------------------------------------
-  // Building a document from YouTube Data API responses
+  // Helpers for data from the YouTube Data API
 
   /** Drops API bookkeeping (kind, etag) and snippet.localized when it repeats the title and description. */
   function cleanResource(raw) {
@@ -414,43 +503,17 @@
     });
   }
 
-  /**
-   * playlists: playlist resources; items: { [playlistId]: playlistItem resources };
-   * videos: { [videoId]: video resource }. Every playlist lands at the top level.
-   */
-  function buildFromYouTube({ playlists = [], items = {}, videos = {} }) {
-    const doc = emptyDoc();
-    for (const raw of playlists) {
-      if (!raw?.id || isPlaylist(doc, raw.id)) continue;
-      const entries = [];
-      for (const item of items[raw.id] || []) {
-        const videoId = item.contentDetails?.videoId ?? item.snippet?.resourceId?.videoId;
-        if (!videoId) continue;
-        entries.push(withoutUndefined({ videoId, addedAt: item.snippet?.publishedAt, note: item.contentDetails?.note }));
-        if (!hasOwn(doc.videos, videoId)) {
-          doc.videos[videoId] = hasOwn(videos, videoId) ? cleanResource(videos[videoId]) : unavailableVideo(videoId, item);
-        }
-      }
-      doc.playlists[raw.id] = {
-        title: raw.snippet?.title || 'Untitled playlist',
-        open: false,
-        items: entries,
-        youtube: cleanResource(raw),
-      };
-      doc.root.push(raw.id);
-    }
-    return doc;
-  }
-
   const model = {
     FORMAT,
     VERSION,
     ROOT,
+    LIKED,
     BackupError,
     emptyDoc,
     isEmpty,
     isFolder,
     isPlaylist,
+    isReadOnly,
     getFolder,
     getPlaylist,
     getVideo,
@@ -460,10 +523,16 @@
     addFolder,
     renameFolder,
     deleteFolder,
+    deleteFolders,
     setOpen,
     canMoveNode,
+    moveNodes,
     moveNode,
+    moveVideos,
     moveVideo,
+    removeVideos,
+    snapshot,
+    restore,
     docStats,
     folderStats,
     formatDuration,
@@ -471,7 +540,9 @@
     validate,
     parseBackup,
     toBackup,
-    buildFromYouTube,
+    cleanResource,
+    withoutUndefined,
+    unavailableVideo,
   };
 
   PM.model = model;
