@@ -1,0 +1,651 @@
+{
+  "format": "playlist-manager",
+  "version": 1,
+  "exportedAt": "2026-10-30T12:00:00.000Z",
+  "root": [
+    "fld_music",
+    "fld_learning",
+    "PLsample0000000004",
+    "PLsample0000000005"
+  ],
+  "folders": {
+    "fld_music": {
+      "name": "Music",
+      "open": true,
+      "children": [
+        "PLsample0000000001",
+        "fld_focus"
+      ]
+    },
+    "fld_focus": {
+      "name": "Focus",
+      "open": false,
+      "children": [
+        "PLsample0000000002"
+      ]
+    },
+    "fld_learning": {
+      "name": "Learning",
+      "open": false,
+      "children": [
+        "PLsample0000000003"
+      ]
+    }
+  },
+  "playlists": {
+    "PLsample0000000001": {
+      "title": "Morning run",
+      "open": false,
+      "items": [
+        {
+          "videoId": "sampleVid01",
+          "addedAt": "2024-05-01T10:00:00Z"
+        },
+        {
+          "videoId": "sampleVid02",
+          "addedAt": "2024-05-02T10:00:00Z"
+        },
+        {
+          "videoId": "sampleVid03",
+          "addedAt": "2024-05-03T10:00:00Z"
+        }
+      ],
+      "youtube": {
+        "id": "PLsample0000000001",
+        "snippet": {
+          "publishedAt": "2023-11-20T08:00:00Z",
+          "channelId": "UCsampleOwner00000000000",
+          "title": "Morning run",
+          "description": "",
+          "thumbnails": {},
+          "channelTitle": "You"
+        },
+        "status": {
+          "privacyStatus": "public"
+        },
+        "contentDetails": {
+          "itemCount": 3
+        }
+      }
+    },
+    "PLsample0000000002": {
+      "title": "Deep work",
+      "open": false,
+      "items": [
+        {
+          "videoId": "sampleVid04",
+          "addedAt": "2024-05-01T10:00:00Z"
+        },
+        {
+          "videoId": "sampleVid05",
+          "addedAt": "2024-05-02T10:00:00Z"
+        }
+      ],
+      "youtube": {
+        "id": "PLsample0000000002",
+        "snippet": {
+          "publishedAt": "2023-11-20T08:00:00Z",
+          "channelId": "UCsampleOwner00000000000",
+          "title": "Deep work",
+          "description": "",
+          "thumbnails": {},
+          "channelTitle": "You"
+        },
+        "status": {
+          "privacyStatus": "unlisted"
+        },
+        "contentDetails": {
+          "itemCount": 2
+        }
+      }
+    },
+    "PLsample0000000003": {
+      "title": "JavaScript talks",
+      "open": false,
+      "items": [
+        {
+          "videoId": "sampleVid06",
+          "addedAt": "2024-05-01T10:00:00Z"
+        },
+        {
+          "videoId": "sampleVid07",
+          "addedAt": "2024-05-02T10:00:00Z"
+        },
+        {
+          "videoId": "sampleVid08",
+          "addedAt": "2024-05-03T10:00:00Z"
+        },
+        {
+          "videoId": "sampleVid04",
+          "addedAt": "2024-05-04T10:00:00Z"
+        }
+      ],
+      "youtube": {
+        "id": "PLsample0000000003",
+        "snippet": {
+          "publishedAt": "2023-11-20T08:00:00Z",
+          "channelId": "UCsampleOwner00000000000",
+          "title": "JavaScript talks",
+          "description": "",
+          "thumbnails": {},
+          "channelTitle": "You"
+        },
+        "status": {
+          "privacyStatus": "public"
+        },
+        "contentDetails": {
+          "itemCount": 4
+        }
+      }
+    },
+    "PLsample0000000004": {
+      "title": "Cooking ideas",
+      "open": false,
+      "items": [
+        {
+          "videoId": "sampleVid09",
+          "addedAt": "2024-05-01T10:00:00Z"
+        },
+        {
+          "videoId": "sampleVid10",
+          "addedAt": "2024-05-02T10:00:00Z"
+        },
+        {
+          "videoId": "sampleGone1",
+          "addedAt": "2024-03-01T09:00:00Z"
+        }
+      ],
+      "youtube": {
+        "id": "PLsample0000000004",
+        "snippet": {
+          "publishedAt": "2023-11-20T08:00:00Z",
+          "channelId": "UCsampleOwner00000000000",
+          "title": "Cooking ideas",
+          "description": "",
+          "thumbnails": {},
+          "channelTitle": "You"
+        },
+        "status": {
+          "privacyStatus": "public"
+        },
+        "contentDetails": {
+          "itemCount": 3
+        }
+      }
+    },
+    "PLsample0000000005": {
+      "title": "Watch someday",
+      "open": false,
+      "items": [],
+      "youtube": {
+        "id": "PLsample0000000005",
+        "snippet": {
+          "publishedAt": "2023-11-20T08:00:00Z",
+          "channelId": "UCsampleOwner00000000000",
+          "title": "Watch someday",
+          "description": "",
+          "thumbnails": {},
+          "channelTitle": "You"
+        },
+        "status": {
+          "privacyStatus": "private"
+        },
+        "contentDetails": {
+          "itemCount": 0
+        }
+      }
+    }
+  },
+  "videos": {
+    "sampleVid01": {
+      "id": "sampleVid01",
+      "snippet": {
+        "publishedAt": "2024-02-11T12:00:00Z",
+        "channelId": "UCsample0000000000000001",
+        "title": "Sample: Easy 5 km warm-up mix",
+        "description": "Sample description for “Sample: Easy 5 km warm-up mix”.",
+        "thumbnails": {
+          "default": {
+            "url": "https://i.ytimg.com/vi/sampleVid01/default.jpg",
+            "width": 120,
+            "height": 90
+          }
+        },
+        "channelTitle": "Sample Channel",
+        "tags": [
+          "sample"
+        ],
+        "categoryId": "27",
+        "liveBroadcastContent": "none"
+      },
+      "contentDetails": {
+        "duration": "PT32M10S",
+        "dimension": "2d",
+        "definition": "hd",
+        "caption": "false",
+        "licensedContent": false,
+        "projection": "rectangular"
+      },
+      "statistics": {
+        "viewCount": "1000",
+        "likeCount": "40",
+        "favoriteCount": "0",
+        "commentCount": "3"
+      },
+      "status": {
+        "uploadStatus": "processed",
+        "privacyStatus": "public",
+        "license": "youtube",
+        "embeddable": true,
+        "publicStatsViewable": true,
+        "madeForKids": false
+      }
+    },
+    "sampleVid02": {
+      "id": "sampleVid02",
+      "snippet": {
+        "publishedAt": "2024-03-12T12:00:00Z",
+        "channelId": "UCsample0000000000000001",
+        "title": "Sample: Tempo run playlist",
+        "description": "Sample description for “Sample: Tempo run playlist”.",
+        "thumbnails": {
+          "default": {
+            "url": "https://i.ytimg.com/vi/sampleVid02/default.jpg",
+            "width": 120,
+            "height": 90
+          }
+        },
+        "channelTitle": "Sample Channel",
+        "tags": [
+          "sample"
+        ],
+        "categoryId": "27",
+        "liveBroadcastContent": "none"
+      },
+      "contentDetails": {
+        "duration": "PT45M",
+        "dimension": "2d",
+        "definition": "hd",
+        "caption": "false",
+        "licensedContent": false,
+        "projection": "rectangular"
+      },
+      "statistics": {
+        "viewCount": "2000",
+        "likeCount": "80",
+        "favoriteCount": "0",
+        "commentCount": "6"
+      },
+      "status": {
+        "uploadStatus": "processed",
+        "privacyStatus": "public",
+        "license": "youtube",
+        "embeddable": true,
+        "publicStatsViewable": true,
+        "madeForKids": false
+      }
+    },
+    "sampleVid03": {
+      "id": "sampleVid03",
+      "snippet": {
+        "publishedAt": "2024-04-13T12:00:00Z",
+        "channelId": "UCsample0000000000000002",
+        "title": "Sample: Cool-down stretches",
+        "description": "Sample description for “Sample: Cool-down stretches”.",
+        "thumbnails": {
+          "default": {
+            "url": "https://i.ytimg.com/vi/sampleVid03/default.jpg",
+            "width": 120,
+            "height": 90
+          }
+        },
+        "channelTitle": "Another Sample Channel",
+        "tags": [
+          "sample"
+        ],
+        "categoryId": "27",
+        "liveBroadcastContent": "none"
+      },
+      "contentDetails": {
+        "duration": "PT8M5S",
+        "dimension": "2d",
+        "definition": "hd",
+        "caption": "false",
+        "licensedContent": false,
+        "projection": "rectangular"
+      },
+      "statistics": {
+        "viewCount": "3000",
+        "likeCount": "120",
+        "favoriteCount": "0",
+        "commentCount": "9"
+      },
+      "status": {
+        "uploadStatus": "processed",
+        "privacyStatus": "public",
+        "license": "youtube",
+        "embeddable": true,
+        "publicStatsViewable": true,
+        "madeForKids": false
+      }
+    },
+    "sampleVid04": {
+      "id": "sampleVid04",
+      "snippet": {
+        "publishedAt": "2024-05-14T12:00:00Z",
+        "channelId": "UCsample0000000000000002",
+        "title": "Sample: Lo-fi beats to focus to",
+        "description": "Sample description for “Sample: Lo-fi beats to focus to”.",
+        "thumbnails": {
+          "default": {
+            "url": "https://i.ytimg.com/vi/sampleVid04/default.jpg",
+            "width": 120,
+            "height": 90
+          }
+        },
+        "channelTitle": "Another Sample Channel",
+        "tags": [
+          "sample"
+        ],
+        "categoryId": "27",
+        "liveBroadcastContent": "none"
+      },
+      "contentDetails": {
+        "duration": "PT1H2M3S",
+        "dimension": "2d",
+        "definition": "hd",
+        "caption": "false",
+        "licensedContent": false,
+        "projection": "rectangular"
+      },
+      "statistics": {
+        "viewCount": "4000",
+        "likeCount": "160",
+        "favoriteCount": "0",
+        "commentCount": "12"
+      },
+      "status": {
+        "uploadStatus": "processed",
+        "privacyStatus": "public",
+        "license": "youtube",
+        "embeddable": true,
+        "publicStatsViewable": true,
+        "madeForKids": false
+      }
+    },
+    "sampleVid05": {
+      "id": "sampleVid05",
+      "snippet": {
+        "publishedAt": "2024-06-15T12:00:00Z",
+        "channelId": "UCsample0000000000000001",
+        "title": "Sample: Brown noise, 3 hours",
+        "description": "Sample description for “Sample: Brown noise, 3 hours”.",
+        "thumbnails": {
+          "default": {
+            "url": "https://i.ytimg.com/vi/sampleVid05/default.jpg",
+            "width": 120,
+            "height": 90
+          }
+        },
+        "channelTitle": "Sample Channel",
+        "tags": [
+          "sample"
+        ],
+        "categoryId": "27",
+        "liveBroadcastContent": "none"
+      },
+      "contentDetails": {
+        "duration": "PT3H",
+        "dimension": "2d",
+        "definition": "hd",
+        "caption": "false",
+        "licensedContent": false,
+        "projection": "rectangular"
+      },
+      "statistics": {
+        "viewCount": "5000",
+        "likeCount": "200",
+        "favoriteCount": "0",
+        "commentCount": "15"
+      },
+      "status": {
+        "uploadStatus": "processed",
+        "privacyStatus": "public",
+        "license": "youtube",
+        "embeddable": true,
+        "publicStatsViewable": true,
+        "madeForKids": false
+      }
+    },
+    "sampleVid06": {
+      "id": "sampleVid06",
+      "snippet": {
+        "publishedAt": "2024-07-16T12:00:00Z",
+        "channelId": "UCsample0000000000000001",
+        "title": "Sample: Async JavaScript explained",
+        "description": "Sample description for “Sample: Async JavaScript explained”.",
+        "thumbnails": {
+          "default": {
+            "url": "https://i.ytimg.com/vi/sampleVid06/default.jpg",
+            "width": 120,
+            "height": 90
+          }
+        },
+        "channelTitle": "Sample Channel",
+        "tags": [
+          "sample"
+        ],
+        "categoryId": "27",
+        "liveBroadcastContent": "none"
+      },
+      "contentDetails": {
+        "duration": "PT27M41S",
+        "dimension": "2d",
+        "definition": "hd",
+        "caption": "false",
+        "licensedContent": false,
+        "projection": "rectangular"
+      },
+      "statistics": {
+        "viewCount": "6000",
+        "likeCount": "240",
+        "favoriteCount": "0",
+        "commentCount": "18"
+      },
+      "status": {
+        "uploadStatus": "processed",
+        "privacyStatus": "public",
+        "license": "youtube",
+        "embeddable": true,
+        "publicStatsViewable": true,
+        "madeForKids": false
+      }
+    },
+    "sampleVid07": {
+      "id": "sampleVid07",
+      "snippet": {
+        "publishedAt": "2024-08-17T12:00:00Z",
+        "channelId": "UCsample0000000000000002",
+        "title": "Sample: Writing a Chrome extension",
+        "description": "Sample description for “Sample: Writing a Chrome extension”.",
+        "thumbnails": {
+          "default": {
+            "url": "https://i.ytimg.com/vi/sampleVid07/default.jpg",
+            "width": 120,
+            "height": 90
+          }
+        },
+        "channelTitle": "Another Sample Channel",
+        "tags": [
+          "sample"
+        ],
+        "categoryId": "27",
+        "liveBroadcastContent": "none"
+      },
+      "contentDetails": {
+        "duration": "PT18M2S",
+        "dimension": "2d",
+        "definition": "hd",
+        "caption": "false",
+        "licensedContent": false,
+        "projection": "rectangular"
+      },
+      "statistics": {
+        "viewCount": "7000",
+        "likeCount": "280",
+        "favoriteCount": "0",
+        "commentCount": "21"
+      },
+      "status": {
+        "uploadStatus": "processed",
+        "privacyStatus": "public",
+        "license": "youtube",
+        "embeddable": true,
+        "publicStatsViewable": true,
+        "madeForKids": false
+      }
+    },
+    "sampleVid08": {
+      "id": "sampleVid08",
+      "snippet": {
+        "publishedAt": "2024-09-18T12:00:00Z",
+        "channelId": "UCsample0000000000000002",
+        "title": "Sample: CSS grid in 10 minutes",
+        "description": "Sample description for “Sample: CSS grid in 10 minutes”.",
+        "thumbnails": {
+          "default": {
+            "url": "https://i.ytimg.com/vi/sampleVid08/default.jpg",
+            "width": 120,
+            "height": 90
+          }
+        },
+        "channelTitle": "Another Sample Channel",
+        "tags": [
+          "sample"
+        ],
+        "categoryId": "27",
+        "liveBroadcastContent": "none"
+      },
+      "contentDetails": {
+        "duration": "PT10M",
+        "dimension": "2d",
+        "definition": "hd",
+        "caption": "false",
+        "licensedContent": false,
+        "projection": "rectangular"
+      },
+      "statistics": {
+        "viewCount": "8000",
+        "likeCount": "320",
+        "favoriteCount": "0",
+        "commentCount": "24"
+      },
+      "status": {
+        "uploadStatus": "processed",
+        "privacyStatus": "public",
+        "license": "youtube",
+        "embeddable": true,
+        "publicStatsViewable": true,
+        "madeForKids": false
+      }
+    },
+    "sampleVid09": {
+      "id": "sampleVid09",
+      "snippet": {
+        "publishedAt": "2024-01-19T12:00:00Z",
+        "channelId": "UCsample0000000000000001",
+        "title": "Sample: Weeknight pasta",
+        "description": "Sample description for “Sample: Weeknight pasta”.",
+        "thumbnails": {
+          "default": {
+            "url": "https://i.ytimg.com/vi/sampleVid09/default.jpg",
+            "width": 120,
+            "height": 90
+          }
+        },
+        "channelTitle": "Sample Channel",
+        "tags": [
+          "sample"
+        ],
+        "categoryId": "27",
+        "liveBroadcastContent": "none"
+      },
+      "contentDetails": {
+        "duration": "PT12M30S",
+        "dimension": "2d",
+        "definition": "hd",
+        "caption": "false",
+        "licensedContent": false,
+        "projection": "rectangular"
+      },
+      "statistics": {
+        "viewCount": "9000",
+        "likeCount": "360",
+        "favoriteCount": "0",
+        "commentCount": "27"
+      },
+      "status": {
+        "uploadStatus": "processed",
+        "privacyStatus": "public",
+        "license": "youtube",
+        "embeddable": true,
+        "publicStatsViewable": true,
+        "madeForKids": false
+      }
+    },
+    "sampleVid10": {
+      "id": "sampleVid10",
+      "snippet": {
+        "publishedAt": "2024-02-10T12:00:00Z",
+        "channelId": "UCsample0000000000000001",
+        "title": "Sample: Bread from scratch",
+        "description": "Sample description for “Sample: Bread from scratch”.",
+        "thumbnails": {
+          "default": {
+            "url": "https://i.ytimg.com/vi/sampleVid10/default.jpg",
+            "width": 120,
+            "height": 90
+          }
+        },
+        "channelTitle": "Sample Channel",
+        "tags": [
+          "sample"
+        ],
+        "categoryId": "27",
+        "liveBroadcastContent": "none"
+      },
+      "contentDetails": {
+        "duration": "PT21M9S",
+        "dimension": "2d",
+        "definition": "hd",
+        "caption": "false",
+        "licensedContent": false,
+        "projection": "rectangular"
+      },
+      "statistics": {
+        "viewCount": "10000",
+        "likeCount": "400",
+        "favoriteCount": "0",
+        "commentCount": "30"
+      },
+      "status": {
+        "uploadStatus": "processed",
+        "privacyStatus": "public",
+        "license": "youtube",
+        "embeddable": true,
+        "publicStatsViewable": true,
+        "madeForKids": false
+      }
+    },
+    "sampleGone1": {
+      "id": "sampleGone1",
+      "unavailable": true,
+      "snippet": {
+        "title": "Deleted video"
+      },
+      "status": {
+        "privacyStatus": "privacyStatusUnspecified"
+      }
+    }
+  }
+}

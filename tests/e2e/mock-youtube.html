@@ -1,0 +1,99 @@
+<!doctype html>
+<!--
+  Stand-in for youtube.com used by the end-to-end test. It mimics what the
+  extension relies on: <ytd-browse> pages that YouTube hides instead of
+  removing, a #primary column that renders late, in-app navigation that fires
+  "yt-navigate-finish", the `dark` attribute on <html>, and a "/" keyboard
+  shortcut on the document. The test serves it with Trusted Types enforced.
+-->
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>YouTube (test stand-in)</title>
+  <style>
+    html { font-size: 10px; }
+    body { margin: 0; font-family: Arial, sans-serif; background: #fff; }
+    html[dark] body { background: #0f0f0f; color: #f1f1f1; }
+    nav { display: flex; gap: 12px; padding: 12px 24px; font-size: 1.4rem; }
+    #primary { padding: 0 24px; }
+    #contents { display: grid; grid-template-columns: repeat(4, 1fr); gap: 16px; }
+    .tile { height: 120px; border-radius: 12px; background: #ddd; }
+    html[dark] .tile { background: #333; }
+  </style>
+</head>
+<body>
+  <ytd-app>
+    <nav>
+      <a href="/" data-spa>Home</a>
+      <a href="/feed/playlists" data-spa>Playlists</a>
+      <input id="search" placeholder="Search">
+    </nav>
+    <ytd-page-manager>
+      <ytd-browse id="home" hidden>
+        <ytd-two-column-browse-results-renderer>
+          <div id="primary"><p>Home page</p></div>
+        </ytd-two-column-browse-results-renderer>
+      </ytd-browse>
+      <ytd-browse id="playlists" hidden>
+        <ytd-two-column-browse-results-renderer id="playlists-columns"></ytd-two-column-browse-results-renderer>
+      </ytd-browse>
+    </ytd-page-manager>
+  </ytd-app>
+  <script>
+    window.shortcutFired = false;
+
+    // YouTube renders the playlist grid a little after navigation.
+    function renderPlaylistsPage() {
+      const columns = document.getElementById('playlists-columns');
+      if (columns.firstElementChild) return;
+      setTimeout(() => {
+        const primary = document.createElement('div');
+        primary.id = 'primary';
+        const grid = document.createElement('ytd-rich-grid-renderer');
+        const contents = document.createElement('div');
+        contents.id = 'contents';
+        for (let i = 0; i < 8; i++) {
+          const tile = document.createElement('div');
+          tile.className = 'tile';
+          contents.append(tile);
+        }
+        grid.append(contents);
+        primary.append(grid);
+        columns.append(primary);
+      }, 400);
+    }
+
+    function show(path) {
+      const onPlaylists = path.replace(/\/+$/, '') === '/feed/playlists';
+      document.getElementById('home').hidden = onPlaylists;
+      document.getElementById('playlists').hidden = !onPlaylists;
+      if (onPlaylists) renderPlaylistsPage();
+    }
+
+    window.mockNavigate = (path) => {
+      history.pushState({}, '', path);
+      show(path);
+      document.dispatchEvent(new CustomEvent('yt-navigate-finish', { bubbles: true }));
+    };
+
+    document.addEventListener('click', (e) => {
+      const link = e.target.closest && e.target.closest('a[data-spa]');
+      if (!link) return;
+      e.preventDefault();
+      window.mockNavigate(link.getAttribute('href'));
+    });
+
+    // Like YouTube's "/" shortcut, which jumps to the search box. A key typed
+    // inside a shadow root reaches the document with the shadow host as target.
+    document.addEventListener('keydown', (e) => {
+      if (e.key === '/' && !/INPUT|TEXTAREA/.test(e.target.tagName)) {
+        window.shortcutFired = true;
+        e.preventDefault();
+        document.getElementById('search').focus();
+      }
+    });
+
+    show(location.pathname);
+  </script>
+</body>
+</html>

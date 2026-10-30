@@ -1,0 +1,10 @@
+{
+  "name": "playlist-manager-for-youtube",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Chrome extension that organizes YouTube playlists into folders.",
+  "scripts": {
+    "test": "node --test tests/unit/*.test.js",
+    "test:e2e": "node tests/e2e/run.js"
+  }
+}
