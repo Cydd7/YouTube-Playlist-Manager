@@ -1,5 +1,5 @@
 /*
- * Playlist Manager data model.
+ * YouTube Playlist Manager data model.
  *
  * The whole library is one JSON document:
  *
@@ -20,7 +20,9 @@
 
   const PM = (globalThis.PM ??= {});
 
-  const FORMAT = 'playlist-manager';
+  const FORMAT = 'youtube-playlist-manager';
+  // Backups made before the app was renamed say "playlist-manager"; the format is the same.
+  const LEGACY_FORMATS = ['playlist-manager'];
   const VERSION = 1;
   const ROOT = 'root';
   const MAX_PROBLEMS = 50;
@@ -245,10 +247,12 @@
     const done = () => (hidden ? [...problems, `…and ${hidden} more problems.`] : problems);
 
     if (!isPlainObject(doc)) return ['The file does not contain a JSON object.'];
-    if (doc.format !== FORMAT) return [`This is not a Playlist Manager backup (expected "format": "${FORMAT}").`];
+    if (doc.format !== FORMAT && !LEGACY_FORMATS.includes(doc.format)) {
+      return [`This is not a YouTube Playlist Manager backup (expected "format": "${FORMAT}").`];
+    }
     if (!Number.isInteger(doc.version) || doc.version < 1) return ['The backup has no valid "version".'];
     if (doc.version > VERSION) {
-      return [`This backup was made by a newer version of Playlist Manager (format ${doc.version}). Update the extension and try again.`];
+      return [`This backup was made by a newer version of YouTube Playlist Manager (format ${doc.version}). Update the extension and try again.`];
     }
     if (!Array.isArray(doc.root)) fail('"root" must be a list.');
     for (const key of ['folders', 'playlists', 'videos']) {

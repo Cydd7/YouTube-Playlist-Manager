@@ -20,7 +20,7 @@ const SAMPLE = path.resolve(__dirname, '../../samples/sample-backup.json');
 const MOCK_PAGE = fs.readFileSync(path.join(__dirname, 'mock-youtube.html'), 'utf8');
 const EXTENSION_ID = 'hbmgcfjjjjkdmbajfejeeabakcakcoil';
 const PIXEL = Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==', 'base64');
-const HOST = '#playlist-manager';
+const HOST = '#youtube-playlist-manager';
 
 const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'pm-e2e-'));
 const screenshotDir = process.env.SCREENSHOTS;
@@ -44,7 +44,7 @@ const storage = () => worker.evaluate(() => chrome.storage.local.get(null));
  */
 function tree(p = page) {
   return p.evaluate(() => {
-    const root = document.querySelector('#playlist-manager')?.shadowRoot;
+    const root = document.querySelector('#youtube-playlist-manager')?.shadowRoot;
     if (!root) return null;
     return [...root.querySelectorAll('.pm-row')].map((r) => {
       const depth = Number(r.style.getPropertyValue('--depth'));
@@ -110,7 +110,7 @@ step('appears above the playlist grid after in-app navigation to Playlists', asy
   await page.click('nav a[href="/feed/playlists"]');
   await page.locator(`${HOST} .pm-empty`).waitFor();
   const placement = await page.evaluate(() => {
-    const host = document.querySelector('#playlist-manager');
+    const host = document.querySelector('#youtube-playlist-manager');
     return [host.parentElement.id, host.closest('ytd-browse').id, host.nextElementSibling.tagName];
   });
   assert.deepEqual(placement, ['primary', 'playlists', 'YTD-RICH-GRID-RENDERER']);
@@ -252,7 +252,7 @@ step('exports one JSON file with the structure and full video data', async () =>
   const downloadPromise = page.waitForEvent('download');
   await button('Export').click();
   const download = await downloadPromise;
-  assert.match(download.suggestedFilename(), /^playlist-manager-backup-\d{4}-\d{2}-\d{2}\.json$/);
+  assert.match(download.suggestedFilename(), /^youtube-playlist-manager-backup-\d{4}-\d{2}-\d{2}\.json$/);
   const backup = JSON.parse(fs.readFileSync(await download.path(), 'utf8'));
   assert.deepEqual(M.validate(backup), []);
   const stored = await storage();
@@ -271,7 +271,7 @@ step('keeps everything after a page reload', async () => {
 });
 
 step("follows YouTube's dark theme", async () => {
-  const theme = () => page.evaluate(() => document.querySelector('#playlist-manager').shadowRoot.querySelector('.pm').dataset.theme);
+  const theme = () => page.evaluate(() => document.querySelector('#youtube-playlist-manager').shadowRoot.querySelector('.pm').dataset.theme);
   assert.equal(await theme(), 'light');
   await page.evaluate(() => document.documentElement.setAttribute('dark', ''));
   await waitFor(async () => (await theme()) === 'dark', 'dark theme');
@@ -288,7 +288,7 @@ step('leaves with in-app navigation and comes back', async () => {
 });
 
 step('puts itself back if YouTube re-renders the page', async () => {
-  await page.evaluate(() => document.querySelector('#playlist-manager').remove());
+  await page.evaluate(() => document.querySelector('#youtube-playlist-manager').remove());
   await page.locator(HOST).waitFor({ timeout: 3000 });
   await page.locator(`${HOST} .pm-row`).first().waitFor();
 });
@@ -317,7 +317,7 @@ step('shows changes made in another tab', async () => {
 step('rejects a damaged backup and says why', async () => {
   const before = await tree();
   const bad = path.join(tmp, 'bad.json');
-  fs.writeFileSync(bad, JSON.stringify({ format: 'playlist-manager', version: 1, root: ['ghost'], folders: {}, playlists: {}, videos: {} }));
+  fs.writeFileSync(bad, JSON.stringify({ format: 'youtube-playlist-manager', version: 1, root: ['ghost'], folders: {}, playlists: {}, videos: {} }));
   await chooseFile(bad);
   await expectStatus(/Couldn't import “bad\.json”: The top level lists "ghost", which is not a folder or playlist/);
   assert.deepEqual(await tree(), before);
@@ -393,6 +393,22 @@ step('pulls every playlist and video from YouTube (Google stubbed)', async () =>
   await row('Pulled two').locator('.pm-name').click();
   await waitFor(async () => (await tree()).includes('  V Deleted video'), 'pulled videos visible');
   await shot('4-pulled');
+});
+
+step('loads a library saved before the app was renamed', async () => {
+  await page.waitForTimeout(500); // let the debounced save from the previous step finish
+  await worker.evaluate(async () => {
+    const { 'pm.structure': structure } = await chrome.storage.local.get('pm.structure');
+    await chrome.storage.local.set({
+      'pm.structure': { ...structure, format: 'playlist-manager' },
+      'pm.meta': { rev: Date.now(), by: 'old-version' },
+    });
+  });
+  await page.reload();
+  await expectTree(['P+ Pulled one', 'P- Pulled two', '  V Pulled vidB', '  V Deleted video']);
+  assert.equal(await page.locator(`${HOST} .pm-status[data-kind="error"]`).count(), 0, 'no "damaged library" error');
+  await row('Pulled one').locator('.pm-name').click();
+  await waitFor(async () => (await storage())['pm.structure'].format === 'youtube-playlist-manager', 'format name updated on the next save');
 });
 
 // --- runner -------------------------------------------------------------------------

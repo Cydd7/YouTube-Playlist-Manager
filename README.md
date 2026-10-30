@@ -1,4 +1,4 @@
-# Playlist Manager for YouTube
+# YouTube Playlist Manager
 
 A Chrome extension that adds a dashboard to the top of your YouTube playlists page
 (<https://www.youtube.com/feed/playlists>). In it you can:
@@ -31,9 +31,9 @@ After changing the code, click the reload button on the extension's card in `chr
 | Delete a folder | Use the bin button on its row. Whatever was inside moves up to the parent folder; no playlists or videos are deleted. |
 | Open or close | Click a folder's or playlist's row. An open playlist shows its videos. |
 | Move something | Drag its row. Drop on the top or bottom edge of a row to place it before or after that row. Drop on the middle of a folder to put it inside. Drop a video on a playlist to add it to the end. Drop below the last row to move to the top level. Hovering over a closed folder while dragging opens it. |
-| Back up | **Export** downloads `playlist-manager-backup-YYYY-MM-DD.json`. |
+| Back up | **Export** downloads `youtube-playlist-manager-backup-YYYY-MM-DD.json`. |
 | Restore | **Import** a backup. The file is checked first, and you're asked before your current library is replaced. |
-| Hide the folders | Click the arrow next to "Playlist Manager". |
+| Hide the folders | Click the arrow next to "YouTube Playlist Manager". |
 
 A folder can hold folders and playlists. A playlist can hold only videos. The same video can be in several playlists.
 
@@ -77,7 +77,7 @@ A backup is a single JSON document. The library is stored in the same shape.
 
 ```jsonc
 {
-  "format": "playlist-manager",
+  "format": "youtube-playlist-manager",
   "version": 1,
   "exportedAt": "2026-10-30T12:00:00.000Z",
   "root": ["fld_music", "PLsample0000000004"],            // top level, in display order
@@ -102,7 +102,8 @@ A backup is a single JSON document. The library is stored in the same shape.
   IDs. A video's details are stored once even when it's in several playlists, and moving something only edits two
   ID lists.
 - Playlists keep their YouTube IDs and the raw API data. That leaves room to sync changes back to YouTube later.
-- `version` lets future versions convert older backups.
+- `version` lets future versions convert older backups. Backups made before the app was renamed
+  (`"format": "playlist-manager"`) still import.
 - An import is rejected, with the reasons shown, if the file breaks the rules. For example: an ID listed in two
   places, a folder inside itself, an item that isn't a folder or playlist, or a playlist entry whose video is
   missing from `videos`.

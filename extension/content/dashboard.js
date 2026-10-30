@@ -49,7 +49,7 @@
     // Setup
 
     build() {
-      const host = h('div', { id: 'playlist-manager', style: { display: 'block', margin: '16px 0 24px' } });
+      const host = h('div', { id: 'youtube-playlist-manager', style: { display: 'block', margin: '16px 0 24px' } });
       // Keys typed in the dashboard must not trigger YouTube's keyboard shortcuts.
       for (const type of ['keydown', 'keyup', 'keypress']) host.addEventListener(type, (e) => e.stopPropagation());
       const shadow = host.attachShadow({ mode: 'open' });
@@ -82,7 +82,7 @@
       this.body = h('div', { class: 'pm-body' }, this.tree);
       this.root = h('div', { class: 'pm' },
         h('div', { class: 'pm-bar' },
-          h('div', { class: 'pm-heading' }, this.collapseBtn, h('h2', { class: 'pm-title' }, 'Playlist Manager'), this.summary),
+          h('div', { class: 'pm-heading' }, this.collapseBtn, h('h2', { class: 'pm-title' }, 'YouTube Playlist Manager'), this.summary),
           h('div', { class: 'pm-actions' }, Object.values(this.buttons))),
         this.statusEl,
         this.body,
@@ -138,7 +138,8 @@
             this.doc = M.emptyDoc();
             this.setStatus('The saved library looks damaged, so the dashboard started empty. Import a backup to restore it.', 'error', problems);
           } else {
-            this.doc = doc;
+            // Libraries saved before the rename carry the old format name.
+            this.doc = { ...doc, format: M.FORMAT };
           }
           this.ui = { collapsed: false, ...ui };
           this.loaded = true;
@@ -196,10 +197,10 @@
     }
 
     reportError(err) {
-      console.error('[Playlist Manager]', err);
+      console.error('[YouTube Playlist Manager]', err);
       const message = String(err?.message || err);
       if (/context invalidated/i.test(message)) {
-        this.setStatus('Playlist Manager was updated or reloaded. Refresh this page to keep using it.', 'error');
+        this.setStatus('YouTube Playlist Manager was updated or reloaded. Refresh this page to keep using it.', 'error');
       } else {
         this.setStatus(`Something went wrong: ${message}`, 'error');
       }
@@ -529,7 +530,7 @@
     exportBackup() {
       const json = JSON.stringify(M.toBackup(this.doc), null, 2);
       const url = URL.createObjectURL(new Blob([json], { type: 'application/json' }));
-      const link = h('a', { href: url, download: `playlist-manager-backup-${dateStamp()}.json`, hidden: true });
+      const link = h('a', { href: url, download: `youtube-playlist-manager-backup-${dateStamp()}.json`, hidden: true });
       this.root.append(link);
       link.click();
       link.remove();

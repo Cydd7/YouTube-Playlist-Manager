@@ -157,7 +157,7 @@ test('videoInfo describes available and unavailable videos', () => {
 
 test('validate reports structural problems', () => {
   const cases = [
-    [(d) => { d.format = 'other'; }, /not a Playlist Manager backup/],
+    [(d) => { d.format = 'other'; }, /not a YouTube Playlist Manager backup/],
     [(d) => { d.version = 99; }, /newer version/],
     [(d) => { d.root = {}; }, /"root" must be a list/],
     [(d) => { d.folders.A.children.push('ghost'); }, /not a folder or playlist/],
@@ -197,6 +197,11 @@ test('backups round-trip and invalid files are rejected with reasons', () => {
   assert.throws(() => M.parseBackup('{not json'), (err) => err instanceof M.BackupError && /not valid JSON/.test(err.problems[0]));
   const broken = { ...backup, root: ['A'] };
   assert.throws(() => M.parseBackup(JSON.stringify(broken)), (err) => err.problems.length === 1 && /not in any folder/.test(err.problems[0]));
+});
+
+test('backups made before the rename still import', () => {
+  const backup = { ...M.toBackup(makeDoc()), format: 'playlist-manager' };
+  assert.equal(M.parseBackup(JSON.stringify(backup)).format, 'youtube-playlist-manager');
 });
 
 test('parseBackup fills in missing open flags and keeps extra per-item fields', () => {
